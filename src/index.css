@@ -1,0 +1,82 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: 'Noto Sans Lao', 'Noto Sans', sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+}
+
+@layer base {
+  *, ::before, ::after {
+    border-color: rgba(255, 255, 255, 0.08);
+  }
+  html, body, button, input, select, textarea, h1, h2, h3, h4, h5, h6, p, span, table, th, td, div {
+    font-family: 'Noto Sans Lao', 'Noto Sans', sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+  body {
+    background-color: #090d16;
+    color: #f1f5f9;
+  }
+  .tabular-nums, .font-mono, [class*="font-mono"] {
+    font-family: 'JetBrains Mono', monospace !important;
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+/* Enforce pure Noto Sans Lao on the entire printable document */
+#printable-area, #printable-area *, .printable-sheet, .printable-sheet * {
+  font-family: 'Noto Sans Lao', 'Noto Sans', sans-serif !important;
+}
+
+/* Custom subtle scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #090d16;
+}
+::-webkit-scrollbar-thumb {
+  background: #1e293b;
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #334155;
+}
+
+@page {
+  size: A4 portrait;
+  margin: 12mm 12mm 15mm 12mm;
+}
+
+@media print {
+  body {
+    background-color: #ffffff !important;
+    color: #000000 !important;
+    font-size: 11pt !important;
+    font-family: 'Noto Sans Lao', 'Noto Sans', sans-serif !important;
+  }
+  *, *::before, *::after {
+    font-family: 'Noto Sans Lao', 'Noto Sans', sans-serif !important;
+  }
+  .no-print {
+    display: none !important;
+  }
+  .print-only {
+    display: block !important;
+  }
+  table {
+    page-break-inside: auto;
+  }
+  tr {
+    page-break-inside: avoid;
+    page-break-after: auto;
+  }
+  thead {
+    display: table-header-group;
+  }
+  tfoot {
+    display: table-footer-group;
+  }
+}

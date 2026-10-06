@@ -1,0 +1,6 @@
+{
+  "name": "LaoExpense Pro - ລະບົບຄຸ້ມຄອງລາຍຮັບ-ລາຍຈ່າຍ",
+  "description": "ລະບົບຄຸ້ມຄອງລາຍຮັບ-ລາຍຈ່າຍແບບມືອາຊີບ ພ້ອມແຜງຄວບຄຸມ Real-time, ຈັດການງົບປະມານ, ແລະ ລາຍງານການເງິນລະອຽດ",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
