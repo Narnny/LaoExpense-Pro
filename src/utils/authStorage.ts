@@ -1,5 +1,16 @@
 import { User, Transaction, Account, Budget, RecurringTransaction } from '../types';
 import { DEFAULT_CATEGORIES, DEFAULT_ACCOUNTS, DEFAULT_BUDGETS, generateInitialTransactions } from '../data/defaultData';
+import {
+  saveTransactionToRTDB,
+  deleteTransactionFromRTDB,
+  loadTransactionsFromRTDB,
+  saveAccountsToRTDB,
+  saveCategoriesToRTDB,
+  saveBudgetsToRTDB,
+  saveUserToRTDB,
+  findUserInRTDB,
+  resetPasswordInRTDB,
+} from './firebase';
 
 const AUTH_STORAGE_KEYS = {
   USERS: 'lao_expense_users_v2',
@@ -107,7 +118,14 @@ export function loginUser(
 export async function loginUserRemote(
   identifier: string,
   pass: string
-): Promise<{ success: boolean; user?: User; error?: string }> {
+): Promise<{
+  success: boolean;
+  user?: User;
+  error?: string;
+  found?: boolean;
+  accountName?: string;
+  accountPhone?: string;
+}> {
   const cleanId = identifier.trim();
   const cleanPass = pass.trim();
 
@@ -119,41 +137,75 @@ export async function loginUserRemote(
       body: JSON.stringify({ identifier: cleanId, password: cleanPass }),
     });
 
-    if (res.ok) {
-      const data = await res.json();
-      if (data.success && data.user) {
-        const serverUser: User = data.user;
-        const localUsers = getStoredUsers();
-        if (!localUsers.some(u => u.id === serverUser.id)) {
-          saveUsers([...localUsers, serverUser]);
-        }
-        setCurrentUser(serverUser);
+    const data = await res.json().catch(() => null);
 
-        // If server sent synced user data, populate local store
-        if (data.data) {
-          if (Array.isArray(data.data.transactions)) saveUserTransactions(serverUser.id, data.data.transactions);
-          if (Array.isArray(data.data.categories)) saveUserCategories(serverUser.id, data.data.categories);
-          if (Array.isArray(data.data.accounts)) saveUserAccounts(serverUser.id, data.data.accounts);
-          if (Array.isArray(data.data.budgets)) saveUserBudgets(serverUser.id, data.data.budgets);
-          if (Array.isArray(data.data.recurring)) saveUserRecurring(serverUser.id, data.data.recurring);
-        } else {
-          if (loadUserAccounts(serverUser.id).length === 0) {
-            initializeUserData(serverUser.id, serverUser.fullName);
-          }
-        }
-        return { success: true, user: serverUser };
+    if (res.ok && data && data.success && data.user) {
+      const serverUser: User = data.user;
+      const localUsers = getStoredUsers();
+      if (!localUsers.some(u => u.id === serverUser.id)) {
+        saveUsers([...localUsers, serverUser]);
       }
-    } else {
-      const errData = await res.json().catch(() => null);
-      if (errData && errData.error) {
-        return { success: false, error: errData.error };
+      setCurrentUser(serverUser);
+
+      // If server sent synced user data, populate local store
+      if (data.data) {
+        if (Array.isArray(data.data.transactions)) saveUserTransactions(serverUser.id, data.data.transactions);
+        if (Array.isArray(data.data.categories)) saveUserCategories(serverUser.id, data.data.categories);
+        if (Array.isArray(data.data.accounts)) saveUserAccounts(serverUser.id, data.data.accounts);
+        if (Array.isArray(data.data.budgets)) saveUserBudgets(serverUser.id, data.data.budgets);
+        if (Array.isArray(data.data.recurring)) saveUserRecurring(serverUser.id, data.data.recurring);
+      } else {
+        if (loadUserAccounts(serverUser.id).length === 0) {
+          initializeUserData(serverUser.id, serverUser.fullName);
+        }
+      }
+      // Save to Realtime Database in background
+      saveUserToRTDB(serverUser).catch(() => {});
+      return { success: true, user: serverUser };
+    } else if (data) {
+      // Structured server error response (account found vs not found, wrong password)
+      return {
+        success: false,
+        error: data.error,
+        found: data.found,
+        accountName: data.accountName,
+        accountPhone: data.accountPhone,
+      };
+    }
+  } catch (err) {
+    console.warn('Server login fetch failed, falling back to Realtime Database/local storage:', err);
+  }
+
+  // 2. Try Firebase Realtime Database fallback directly
+  try {
+    const rtdbUser = await findUserInRTDB(cleanId);
+    if (rtdbUser) {
+      if (rtdbUser.password === cleanPass) {
+        const localUsers = getStoredUsers();
+        if (!localUsers.some(u => u.id === rtdbUser.id)) {
+          saveUsers([...localUsers, rtdbUser]);
+        }
+        setCurrentUser(rtdbUser);
+        const rtdbTxs = await loadTransactionsFromRTDB(rtdbUser.id);
+        if (rtdbTxs.length > 0) {
+          saveUserTransactions(rtdbUser.id, rtdbTxs);
+        }
+        return { success: true, user: rtdbUser };
+      } else {
+        return {
+          success: false,
+          found: true,
+          accountName: rtdbUser.fullName || rtdbUser.username,
+          accountPhone: rtdbUser.phone,
+          error: `ພົບບັນຊີ "${rtdbUser.fullName}" ແຕ່ລະຫັດຜ່ານບໍ່ຖືກຕ້ອງ`,
+        };
       }
     }
   } catch (err) {
-    console.warn('Server login fetch failed, falling back to local storage:', err);
+    console.warn('Firebase RTDB fallback login error:', err);
   }
 
-  // 2. Fallback to local storage verification
+  // 3. Fallback to local storage verification
   return loginUser(cleanId, cleanPass);
 }
 
@@ -164,6 +216,9 @@ export async function resetPasswordRemote(
 ): Promise<{ success: boolean; user?: User; error?: string }> {
   const cleanId = identifier.trim();
   const cleanPass = newPassword.trim();
+
+  // Sync to Firebase Realtime Database directly
+  resetPasswordInRTDB(cleanId, cleanPass).catch(() => {});
 
   try {
     const res = await fetch('/api/auth/reset-password', {
@@ -233,6 +288,18 @@ export async function findAccountRemote(
       return { found: !!data.found, user: data.user };
     }
   } catch {}
+
+  // Check Firebase Realtime Database
+  try {
+    const rtdbUser = await findUserInRTDB(identifier);
+    if (rtdbUser) {
+      return {
+        found: true,
+        user: { fullName: rtdbUser.fullName, phone: rtdbUser.phone, username: rtdbUser.username },
+      };
+    }
+  } catch {}
+
   const users = getStoredUsers();
   const q = identifier.trim().toLowerCase();
   const u = users.find(x =>
@@ -244,9 +311,10 @@ export async function findAccountRemote(
   return { found: false };
 }
 
-// Sync user account profile to server
+// Sync user account profile to server and Realtime Database
 export function syncUserProfileToServer(user: User): void {
   if (!user || !user.id) return;
+  saveUserToRTDB(user).catch(() => {});
   try {
     fetch('/api/auth/sync-user', {
       method: 'POST',
@@ -256,42 +324,75 @@ export function syncUserProfileToServer(user: User): void {
   } catch {}
 }
 
+// Sync all existing local users to server (ensures local users are recognized across devices)
+export function syncAllLocalUsersToServer(): void {
+  try {
+    const users = getStoredUsers();
+    users.forEach(user => {
+      fetch('/api/auth/sync-user', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user }),
+      }).catch(() => {});
+    });
+  } catch {}
+}
+
+// Automatically sync on module load
+if (typeof window !== 'undefined') {
+  setTimeout(() => {
+    syncAllLocalUsersToServer();
+  }, 500);
+}
+
 // Remote registration
 export async function registerUserRemote(
   phone: string,
   username: string,
   fullName: string,
   pass: string
-): Promise<{ success: boolean; user?: User; error?: string }> {
+): Promise<{
+  success: boolean;
+  user?: User;
+  error?: string;
+  alreadyExists?: boolean;
+  existingUser?: any;
+}> {
   try {
     const res = await fetch('/api/auth/register', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ phone, username, fullName, password: pass }),
     });
-    if (res.ok) {
-      const data = await res.json();
-      if (data.success && data.user) {
-        const newUser: User = data.user;
-        const users = getStoredUsers();
-        saveUsers([...users, newUser]);
-        setCurrentUser(newUser);
-        initializeUserData(newUser.id, newUser.fullName);
-        // Sync fresh starter data to server
-        syncUserDataToServer(newUser.id);
-        return { success: true, user: newUser };
-      }
-    } else {
-      const errData = await res.json().catch(() => null);
-      if (errData && errData.error) {
-        return { success: false, error: errData.error };
-      }
+    const data = await res.json().catch(() => null);
+    if (res.ok && data?.success && data?.user) {
+      const newUser: User = data.user;
+      const users = getStoredUsers();
+      saveUsers([...users, newUser]);
+      setCurrentUser(newUser);
+      initializeUserData(newUser.id, newUser.fullName);
+      // Sync fresh starter data to RTDB and server
+      saveUserToRTDB(newUser).catch(() => {});
+      syncUserDataToServer(newUser.id);
+      return { success: true, user: newUser };
+    } else if (data) {
+      return {
+        success: false,
+        error: data.error,
+        alreadyExists: data.alreadyExists,
+        existingUser: data.existingUser,
+      };
     }
   } catch (err) {
-    console.warn('Server register fetch failed, using local registration:', err);
+    console.warn('Server register fetch failed, using local/RTDB registration:', err);
   }
 
-  return registerUser(phone, username, fullName, pass);
+  const localRes = registerUser(phone, username, fullName, pass);
+  if (localRes.user) {
+    saveUserToRTDB(localRes.user).catch(() => {});
+    syncUserProfileToServer(localRes.user);
+  }
+  return localRes;
 }
 
 // Sync user data to server in background
@@ -397,7 +498,21 @@ export function getUserStorageKey(userId: string, keyName: string): string {
 export function loadUserTransactions(userId: string): Transaction[] {
   try {
     const raw = localStorage.getItem(getUserStorageKey(userId, 'txns'));
-    if (raw) return JSON.parse(raw);
+    if (raw) {
+      let txns: Transaction[] = JSON.parse(raw);
+      // Migration: Clean out any dummy test transactions (Project OPEC, Project OT, tx_1..tx_7)
+      const cleanKey = `lao_expense_${userId}_clean_dummy_v5`;
+      if (!localStorage.getItem(cleanKey)) {
+        txns = txns.filter(t =>
+          t.title !== 'Project OPEC' &&
+          t.title !== 'Project OT' &&
+          !['tx_1', 'tx_2', 'tx_3', 'tx_4', 'tx_5', 'tx_6', 'tx_7'].includes(t.id)
+        );
+        localStorage.setItem(cleanKey, 'true');
+        localStorage.setItem(getUserStorageKey(userId, 'txns'), JSON.stringify(txns));
+      }
+      return txns;
+    }
   } catch {}
 
   return [];
@@ -406,6 +521,9 @@ export function loadUserTransactions(userId: string): Transaction[] {
 export function saveUserTransactions(userId: string, txns: Transaction[]): void {
   try {
     localStorage.setItem(getUserStorageKey(userId, 'txns'), JSON.stringify(txns));
+    txns.forEach(tx => {
+      saveTransactionToRTDB(userId, tx).catch(() => {});
+    });
   } catch {}
 }
 
@@ -422,6 +540,7 @@ export function loadUserCategories(userId: string) {
 export function saveUserCategories(userId: string, cats: any[]): void {
   try {
     localStorage.setItem(getUserStorageKey(userId, 'cats'), JSON.stringify(cats));
+    saveCategoriesToRTDB(userId, cats).catch(() => {});
   } catch {}
 }
 
@@ -430,14 +549,17 @@ export function loadUserAccounts(userId: string): Account[] {
     const raw = localStorage.getItem(getUserStorageKey(userId, 'accs'));
     if (raw) {
       let accs: Account[] = JSON.parse(raw);
-      // Migration: Reset preset starter balance (1,000,000, 200,000, 12,500,000) to 0
+      // Migration: Reset preset starter balance (1,000,000, 200,000, 12,500,000, etc.) to 0
       // so balance starts at 0 until user enters their own money
-      const resetKey = `lao_expense_${userId}_zero_init_bal_v4`;
+      const resetKey = `lao_expense_${userId}_zero_init_bal_v5`;
       if (!localStorage.getItem(resetKey)) {
         accs = accs.map(a => {
           if (
-            (a.id.includes('bcel') && (a.initialBalance === 1000000 || a.initialBalance === 12500000)) ||
-            (a.id.includes('cash') && (a.initialBalance === 200000 || a.initialBalance === 1800000))
+            a.initialBalance === 1000000 ||
+            a.initialBalance === 200000 ||
+            a.initialBalance === 12500000 ||
+            a.initialBalance === 1800000 ||
+            a.initialBalance === 10000000
           ) {
             return { ...a, initialBalance: 0 };
           }
@@ -454,9 +576,24 @@ export function loadUserAccounts(userId: string): Account[] {
   return accs;
 }
 
+// Function to immediately reset all balances to 0 for a user
+export function resetUserBalanceToZero(userId: string): { accounts: Account[]; transactions: Transaction[] } {
+  try {
+    const currentAccs = loadUserAccounts(userId);
+    const zeroedAccs = currentAccs.map(a => ({ ...a, initialBalance: 0 }));
+    saveUserAccounts(userId, zeroedAccs);
+    saveUserTransactions(userId, []);
+    syncUserDataToServer(userId);
+    return { accounts: zeroedAccs, transactions: [] };
+  } catch {
+    return { accounts: [], transactions: [] };
+  }
+}
+
 export function saveUserAccounts(userId: string, accs: Account[]): void {
   try {
     localStorage.setItem(getUserStorageKey(userId, 'accs'), JSON.stringify(accs));
+    saveAccountsToRTDB(userId, accs).catch(() => {});
   } catch {}
 }
 
@@ -473,6 +610,7 @@ export function loadUserBudgets(userId: string): Budget[] {
 export function saveUserBudgets(userId: string, budgets: Budget[]): void {
   try {
     localStorage.setItem(getUserStorageKey(userId, 'budgets'), JSON.stringify(budgets));
+    saveBudgetsToRTDB(userId, budgets).catch(() => {});
   } catch {}
 }
 

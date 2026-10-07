@@ -59,6 +59,15 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
 
       {/* Right: Currency, Language, + Add Transaction, User profile */}
       <div className="flex items-center gap-2 sm:gap-3">
+        {/* Firebase Realtime Database Connected Indicator */}
+        <div
+          className="hidden md:flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-950/40 border border-emerald-500/30 text-[11px] text-emerald-400 font-mono shadow-xs"
+          title="Firebase Realtime Database Connected: nkservice-c26f9-default-rtdb"
+        >
+          <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shrink-0" />
+          <span>Realtime DB</span>
+        </div>
+
         {/* Currency Switcher */}
         <select
           value={currency}

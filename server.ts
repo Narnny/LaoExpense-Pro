@@ -62,35 +62,66 @@ function writeDB(data: ServerDB) {
 
 app.use(express.json({ limit: '15mb' }));
 
-// Smart Phone matcher for Lao phone numbers (handles 020, 20, +856 20, spacing, dashes)
+// Smart Phone matcher for Lao and international phone numbers
+function extractPhoneTail(p?: string): string {
+  if (!p) return '';
+  const digits = p.replace(/\D/g, '');
+  if (digits.length >= 8) return digits.slice(-8);
+  if (digits.length >= 7) return digits.slice(-7);
+  return digits;
+}
+
 function matchPhones(p1?: string, p2?: string): boolean {
   if (!p1 || !p2) return false;
   const d1 = p1.replace(/\D/g, '');
   const d2 = p2.replace(/\D/g, '');
   if (!d1 || !d2) return false;
   if (d1 === d2) return true;
-  // Match last 8 digits (standard Lao mobile tail e.g. 77889900)
-  const tail1 = d1.slice(-8);
-  const tail2 = d2.slice(-8);
-  if (tail1.length >= 7 && tail1 === tail2) return true;
+  const t1 = extractPhoneTail(p1);
+  const t2 = extractPhoneTail(p2);
+  if (t1 && t2 && t1.length >= 7 && t1 === t2) return true;
   return false;
 }
 
-// Flexible User Finder: by Phone, Username, or Full Name
+// Ultra-Flexible User Finder: by Phone, Username, Full Name, or Email (case-insensitive & whitespace tolerant)
 function findUserByIdentifier(users: ServerDB['users'], identifier: string) {
-  if (!identifier) return null;
-  const rawQuery = identifier.trim();
-  const queryLower = rawQuery.toLowerCase();
+  if (!identifier || !Array.isArray(users)) return null;
+  const raw = identifier.trim();
+  const q = raw.toLowerCase();
+  const qDigits = raw.replace(/\D/g, '');
 
   return users.find(u => {
-    // 1. Phone number match
-    if (matchPhones(u.phone, rawQuery)) return true;
-    // 2. Exact username match (case-insensitive)
-    if (u.username.toLowerCase() === queryLower) return true;
-    // 3. Exact full name match (case-insensitive)
-    if (u.fullName.toLowerCase() === queryLower) return true;
-    // 4. Substring full name match if query is at least 3 chars
-    if (queryLower.length >= 3 && u.fullName.toLowerCase().includes(queryLower)) return true;
+    // 1. Phone match by digits or tail
+    if (qDigits.length >= 6 && matchPhones(u.phone, raw)) return true;
+
+    const uName = (u.username || '').toLowerCase().trim();
+    const uFull = (u.fullName || '').toLowerCase().trim();
+
+    // 2. Exact username match
+    if (uName && uName === q) return true;
+
+    // 3. Exact full name match
+    if (uFull && uFull === q) return true;
+
+    // 4. Email format matching (e.g. narnny1994nk@gmail.com matches username narnny)
+    if (q.includes('@')) {
+      const emailPrefix = q.split('@')[0];
+      if (uName === emailPrefix) return true;
+      if (emailPrefix.includes(uName) || uName.includes(emailPrefix)) return true;
+    }
+
+    // 5. Query contains username or username contains query (min 3 chars)
+    if (uName && q.length >= 3 && (uName.includes(q) || q.includes(uName))) return true;
+
+    // 6. Substring match on full name (min 3 chars)
+    if (uFull && q.length >= 3 && (uFull.includes(q) || q.includes(uFull))) return true;
+
+    // 7. If query phone digits are inside u.phone or vice versa
+    const uDigits = (u.phone || '').replace(/\D/g, '');
+    if (qDigits.length >= 6 && uDigits.length >= 6 && (uDigits.includes(qDigits) || qDigits.includes(uDigits))) {
+      return true;
+    }
+
     return false;
   });
 }
@@ -137,15 +168,19 @@ app.post('/api/auth/register', (req, res) => {
   const cleanPhone = phone.trim();
   const cleanUsername = username.trim().toLowerCase();
 
-  // Check uniqueness by phone or username
-  const existing = db.users.find(
-    u => matchPhones(u.phone, cleanPhone) || u.username.toLowerCase() === cleanUsername
-  );
+  // Check if user already exists
+  const existing = findUserByIdentifier(db.users, cleanPhone) || findUserByIdentifier(db.users, cleanUsername);
   if (existing) {
-    const error = matchPhones(existing.phone, cleanPhone)
-      ? 'ເບີໂທລະສັບນີ້ໄດ້ລົງທະບຽນແລ້ວ (Phone number already registered)'
-      : 'ຊື່ຜູ້ໃຊ້ນີ້ມີຄົນໃຊ້ແລ້ວ (Username already taken)';
-    return res.status(409).json({ success: false, error });
+    return res.status(409).json({
+      success: false,
+      alreadyExists: true,
+      existingUser: {
+        fullName: existing.fullName,
+        phone: existing.phone,
+        username: existing.username,
+      },
+      error: `ເບີໂທ ຫຼື ຊື່ນີ້ມີບັນຊີຢູ່ແລ້ວ ("${existing.fullName}" · ${existing.phone})! ບໍ່ຕ້ອງລົງທະບຽນອີກ, ກະລຸນາກົດເຂົ້າສູ່ລະບົບ ຫຼື ຕັ້ງລະຫັດຜ່ານໃໝ່`,
+    });
   }
 
   const colors = ['#2563eb', '#059669', '#7c3aed', '#db2777', '#ea580c', '#0891b2', '#10b981'];
@@ -175,15 +210,50 @@ app.post('/api/auth/login', (req, res) => {
   const db = readDB();
   const user = findUserByIdentifier(db.users, identifier);
 
-  if (!user || user.password !== password.trim()) {
+  if (!user) {
     return res.status(401).json({
       success: false,
-      error: 'ເບີໂທ, ຊື່ ຫຼື ລະຫັດຜ່ານບໍ່ຖືກຕ້ອງ (Invalid credentials)',
+      found: false,
+      error: 'ບໍ່ພົບບັນຊີຈາກ ເບີໂທ, ຊື່ ຫຼື ຊື່ຜູ້ໃຊ້ນີ້ໃນລະບົບ (Account not found). ກະລຸນາກວດຄືນ ຫຼື ກົດ "ລົງທະບຽນໃໝ່"',
     });
   }
 
+  const reqPass = password.trim();
+  const userPass = (user.password || '').trim();
+  const isPasswordMatch = userPass === reqPass || userPass.toLowerCase() === reqPass.toLowerCase();
+
+  if (!isPasswordMatch) {
+    return res.status(401).json({
+      success: false,
+      found: true,
+      accountName: user.fullName || user.username,
+      accountPhone: user.phone,
+      error: `ພົບບັນຊີ "${user.fullName || user.username}" (${user.phone}) ແລ້ວ! ແຕ່ລະຫັດຜ່ານບໍ່ຖືກຕ້ອງ. ກົດ "ລືມລະຫັດຜ່ານ" ເພື່ອຕັ້ງລະຫັດໃໝ່ໄດ້ທັນທີ`,
+    });
+  }
+
+  // Clean up any old dummy test transactions or preset balances
+  const cleanUserData = (uData: any) => {
+    if (!uData) return null;
+    const cleaned = { ...uData };
+    if (Array.isArray(cleaned.transactions)) {
+      cleaned.transactions = cleaned.transactions.filter(
+        (t: any) => t && t.title !== 'Project OPEC' && t.title !== 'Project OT' && !['tx_1', 'tx_2', 'tx_3', 'tx_4', 'tx_5', 'tx_6', 'tx_7'].includes(t.id)
+      );
+    }
+    if (Array.isArray(cleaned.accounts)) {
+      cleaned.accounts = cleaned.accounts.map((a: any) => {
+        if (a && [1000000, 200000, 12500000, 1800000, 10000000].includes(a.initialBalance)) {
+          return { ...a, initialBalance: 0 };
+        }
+        return a;
+      });
+    }
+    return cleaned;
+  };
+
   // Send back user and any existing synced data
-  const userData = db.userData[user.id] || null;
+  const userData = cleanUserData(db.userData[user.id] || null);
 
   return res.json({
     success: true,
@@ -259,6 +329,26 @@ app.post('/api/auth/sync-user', (req, res) => {
   return res.json({ success: true });
 });
 
+// Helper to sanitize test/dummy data
+function cleanUserDataPayload(uData: any) {
+  if (!uData) return null;
+  const cleaned = { ...uData };
+  if (Array.isArray(cleaned.transactions)) {
+    cleaned.transactions = cleaned.transactions.filter(
+      (t: any) => t && t.title !== 'Project OPEC' && t.title !== 'Project OT' && !['tx_1', 'tx_2', 'tx_3', 'tx_4', 'tx_5', 'tx_6', 'tx_7'].includes(t.id)
+    );
+  }
+  if (Array.isArray(cleaned.accounts)) {
+    cleaned.accounts = cleaned.accounts.map((a: any) => {
+      if (a && [1000000, 200000, 12500000, 1800000, 10000000].includes(a.initialBalance)) {
+        return { ...a, initialBalance: 0 };
+      }
+      return a;
+    });
+  }
+  return cleaned;
+}
+
 // Fetch user data
 app.get('/api/user/data', (req, res) => {
   const userId = req.query.userId as string;
@@ -266,7 +356,7 @@ app.get('/api/user/data', (req, res) => {
     return res.status(400).json({ success: false, error: 'Missing userId' });
   }
   const db = readDB();
-  const data = db.userData[userId] || null;
+  const data = cleanUserDataPayload(db.userData[userId] || null);
   res.json({ success: true, data });
 });
 

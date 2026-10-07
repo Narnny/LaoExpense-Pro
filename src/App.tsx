@@ -44,7 +44,15 @@ import {
   saveUserRecurring,
   syncUserDataToServer,
   syncUserProfileToServer,
+  resetUserBalanceToZero,
 } from './utils/authStorage';
+
+import {
+  saveTransactionToRTDB,
+  deleteTransactionFromRTDB,
+  loadTransactionsFromRTDB,
+  subscribeTransactionsFromRTDB,
+} from './utils/firebase';
 
 import {
   processRecurringTransactions,
@@ -201,6 +209,59 @@ export default function App() {
     }
   }, [currentUser?.id]);
 
+  // Realtime Database synchronization for transactions
+  useEffect(() => {
+    if (!currentUser) return;
+    let isMounted = true;
+
+    // Initial Realtime Database load
+    loadTransactionsFromRTDB(currentUser.id).then((rtdbTxs) => {
+      if (isMounted && rtdbTxs && rtdbTxs.length > 0) {
+        // Filter out dummy/test transactions (Project OPEC, Project OT, mock tx_1..tx_7)
+        const cleaned = rtdbTxs.filter(t => {
+          const isDummy = t.title === 'Project OPEC' || t.title === 'Project OT' || ['tx_1', 'tx_2', 'tx_3', 'tx_4', 'tx_5', 'tx_6', 'tx_7'].includes(t.id);
+          if (isDummy) {
+            deleteTransactionFromRTDB(currentUser.id, t.id).catch(() => {});
+            return false;
+          }
+          return true;
+        });
+
+        setTransactions(prev => {
+          const map = new Map<string, Transaction>();
+          prev.filter(t => t.title !== 'Project OPEC' && t.title !== 'Project OT' && !['tx_1', 'tx_2', 'tx_3', 'tx_4', 'tx_5', 'tx_6', 'tx_7'].includes(t.id)).forEach(t => map.set(t.id, t));
+          cleaned.forEach(t => map.set(t.id, t));
+          const merged = Array.from(map.values()).sort((a, b) => {
+            const da = `${a.date} ${a.time || '00:00'}`;
+            const db = `${b.date} ${b.time || '00:00'}`;
+            return db.localeCompare(da);
+          });
+          return merged;
+        });
+      }
+    }).catch(() => {});
+
+    // Realtime Database subscription (live push sync)
+    const unsubscribe = subscribeTransactionsFromRTDB(currentUser.id, (remoteTxs) => {
+      if (isMounted && remoteTxs) {
+        const cleaned = remoteTxs.filter(t => {
+          const isDummy = t.title === 'Project OPEC' || t.title === 'Project OT' || ['tx_1', 'tx_2', 'tx_3', 'tx_4', 'tx_5', 'tx_6', 'tx_7'].includes(t.id);
+          if (isDummy) {
+            deleteTransactionFromRTDB(currentUser.id, t.id).catch(() => {});
+            return false;
+          }
+          return true;
+        });
+        setTransactions(cleaned);
+      }
+    });
+
+    return () => {
+      isMounted = false;
+      if (unsubscribe) unsubscribe();
+    };
+  }, [currentUser?.id]);
+
   // Sync isolated data per user
   useEffect(() => {
     if (currentUser) {
@@ -301,7 +362,7 @@ export default function App() {
     setCurrentUser(null);
   };
 
-  // Transaction CRUD (User Scoped)
+  // Transaction CRUD (User Scoped with Firebase Realtime Database sync)
   const handleSaveTransaction = (
     txData: Omit<Transaction, 'id' | 'createdAt'>,
     editingId?: string
@@ -309,13 +370,16 @@ export default function App() {
     if (!currentUser) return;
     const t = getT(lang);
     if (editingId) {
+      const updatedTx: Transaction = {
+        ...txData,
+        id: editingId,
+        userId: currentUser.id,
+        createdAt: Date.now(),
+      };
       setTransactions(prev =>
-        prev.map(item =>
-          item.id === editingId
-            ? { ...item, ...txData, userId: currentUser.id }
-            : item
-        )
+        prev.map(item => (item.id === editingId ? updatedTx : item))
       );
+      saveTransactionToRTDB(currentUser.id, updatedTx).catch(() => {});
       showToast(t.transactionUpdated);
     } else {
       const newTx: Transaction = {
@@ -325,13 +389,16 @@ export default function App() {
         createdAt: Date.now(),
       };
       setTransactions(prev => [newTx, ...prev]);
+      saveTransactionToRTDB(currentUser.id, newTx).catch(() => {});
       showToast(t.transactionAdded);
     }
   };
 
   const handleDeleteTransaction = (id: string) => {
+    if (!currentUser) return;
     const t = getT(lang);
     setTransactions(prev => prev.filter(item => item.id !== id));
+    deleteTransactionFromRTDB(currentUser.id, id).catch(() => {});
     showToast(t.transactionDeleted);
   };
 
@@ -349,6 +416,7 @@ export default function App() {
       createdAt: Date.now(),
     };
     setTransactions(prev => [duplicated, ...prev]);
+    saveTransactionToRTDB(currentUser.id, duplicated).catch(() => {});
     showToast(`${t.duplicate} ${tx.title}`);
   };
 
@@ -536,6 +604,15 @@ export default function App() {
     showToast(lang === 'lo' ? 'ລຶບຂໍ້ມູນລາຍການທັງໝົດແລ້ວ' : 'All transactions cleared');
   };
 
+  // Reset balance completely to 0 (until user adds their own amount)
+  const handleResetBalance = () => {
+    if (!currentUser) return;
+    const { accounts: zeroedAccs, transactions: zeroedTxns } = resetUserBalanceToZero(currentUser.id);
+    setAccounts(zeroedAccs);
+    setTransactions(zeroedTxns);
+    showToast(lang === 'lo' ? 'ລ້າງຍອດເງິນຄົງເຫຼືອທັງໝົດເປັນ 0 ₭ ຮຽບຮ້ອຍແລ້ວ' : 'Remaining balance reset to 0');
+  };
+
   // If user is not authenticated, display the login/registration screen
   if (!currentUser) {
     return (
@@ -632,6 +709,7 @@ export default function App() {
               onQuickAddTransaction={(tx) => handleSaveTransaction(tx)}
               onViewSlip={(url) => setViewingSlipUrl(url)}
               currentUser={currentUser}
+              onResetBalance={handleResetBalance}
             />
           )}
 
@@ -705,6 +783,7 @@ export default function App() {
                   setEditingTransaction(null);
                   setIsAddModalOpen(true);
                 }}
+                onResetBalance={handleResetBalance}
               />
             </div>
           )}

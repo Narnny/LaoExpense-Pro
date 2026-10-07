@@ -39,6 +39,7 @@ interface RealtimeDashboardProps {
   onQuickAddTransaction?: (data: Omit<Transaction, 'id' | 'createdAt'>) => void;
   onViewSlip?: (slipUrl: string) => void;
   currentUser?: User | null;
+  onResetBalance?: () => void;
 }
 
 export const RealtimeDashboard: React.FC<RealtimeDashboardProps> = ({
@@ -49,10 +50,12 @@ export const RealtimeDashboard: React.FC<RealtimeDashboardProps> = ({
   lang,
   dateFilter,
   setDateFilter,
+  onOpenAddModal,
   onEditTransaction,
   onNavigateToTransactions,
   onViewSlip,
   currentUser,
+  onResetBalance,
 }) => {
   const t = getT(lang);
 
@@ -280,13 +283,24 @@ export const RealtimeDashboard: React.FC<RealtimeDashboardProps> = ({
               <span className="text-[11px] font-semibold tracking-wider text-slate-400 uppercase">
                 {t.totalBalance}
               </span>
-              <span className="text-[10px] font-bold text-emerald-400 bg-emerald-950/70 border border-emerald-500/30 px-1.5 py-0.5 rounded-full">
-                +5%
-              </span>
+              {totalLiquidity > 0 ? (
+                <span className="text-[10px] font-bold text-emerald-400 bg-emerald-950/70 border border-emerald-500/30 px-1.5 py-0.5 rounded-full">
+                  {lang === 'lo' ? 'ພ້ອມໃຊ້ງານ' : 'Available'}
+                </span>
+              ) : (
+                <span className="text-[10px] font-bold text-slate-400 bg-slate-800/80 border border-slate-700 px-1.5 py-0.5 rounded-full">
+                  {lang === 'lo' ? 'ເລີ່ມຕົ້ນ 0 ₭' : 'Start 0'}
+                </span>
+              )}
             </div>
             <div className="text-lg sm:text-xl font-bold font-mono text-slate-100 tabular-nums truncate mt-0.5">
               {formatCurrency(totalLiquidity, currency)}
             </div>
+            {totalLiquidity === 0 && (
+              <p className="text-[10px] text-slate-400 mt-0.5 truncate">
+                {lang === 'lo' ? 'ຍັງບໍ່ມີຍອດເງິນ (ເພີ່ມເຂົ້າມາເອງ)' : 'No balance yet (add yours)'}
+              </p>
+            )}
           </div>
         </div>
 
@@ -301,7 +315,7 @@ export const RealtimeDashboard: React.FC<RealtimeDashboardProps> = ({
                 {t.totalIncome}
               </span>
               <span className="text-[10px] font-bold text-blue-400 bg-blue-950/70 border border-blue-500/30 px-1.5 py-0.5 rounded-full">
-                +12%
+                {filteredTransactions.filter(t => t.type === 'income').length} {lang === 'lo' ? 'ລາຍການ' : 'tx'}
               </span>
             </div>
             <div className="text-lg sm:text-xl font-bold font-mono text-blue-400 tabular-nums truncate mt-0.5">
@@ -321,7 +335,7 @@ export const RealtimeDashboard: React.FC<RealtimeDashboardProps> = ({
                 {t.totalExpense}
               </span>
               <span className="text-[10px] font-bold text-rose-400 bg-rose-950/70 border border-rose-500/30 px-1.5 py-0.5 rounded-full">
-                -4%
+                {filteredTransactions.filter(t => t.type === 'expense').length} {lang === 'lo' ? 'ລາຍການ' : 'tx'}
               </span>
             </div>
             <div className="text-lg sm:text-xl font-bold font-mono text-rose-400 tabular-nums truncate mt-0.5">

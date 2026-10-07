@@ -61,6 +61,8 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onSuccess, lang = 'lo' }
   // Feedback states
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [accountFoundMismatch, setAccountFoundMismatch] = useState<{ name: string; phone?: string } | null>(null);
+  const [alreadyRegisteredUser, setAlreadyRegisteredUser] = useState<{ name: string; phone?: string } | null>(null);
 
   // Auto-search for account preview when user types identifier in forgot password mode
   useEffect(() => {
@@ -104,9 +106,17 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onSuccess, lang = 'lo' }
     }
 
     setIsLoading(true);
+    setAccountFoundMismatch(null);
+    setAlreadyRegisteredUser(null);
     try {
       const res = await loginUserRemote(loginIdentifier, loginPassword);
       if (!res.success || !res.user) {
+        if (res.found) {
+          setAccountFoundMismatch({
+            name: res.accountName || loginIdentifier,
+            phone: res.accountPhone,
+          });
+        }
         setErrorMessage(
           res.error ||
             (lang === 'lo'
@@ -133,6 +143,8 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onSuccess, lang = 'lo' }
   const handleRegisterSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage(null);
+    setAlreadyRegisteredUser(null);
+    setAccountFoundMismatch(null);
 
     if (!regPhone.trim()) {
       setErrorMessage(lang === 'lo' ? 'ກະລຸນາປ້ອນເບີໂທລະສັບ' : 'Please enter your phone number');
@@ -155,6 +167,12 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onSuccess, lang = 'lo' }
     try {
       const res = await registerUserRemote(regPhone, regUsername, regFullName || regUsername, regPassword);
       if (!res.success || !res.user) {
+        if (res.alreadyExists) {
+          setAlreadyRegisteredUser({
+            name: res.existingUser?.fullName || regUsername,
+            phone: res.existingUser?.phone || regPhone,
+          });
+        }
         setErrorMessage(res.error || (lang === 'lo' ? 'ການລົງທະບຽນບໍ່ສຳເລັດ' : 'Registration failed'));
         setIsLoading(false);
         return;
@@ -316,7 +334,81 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onSuccess, lang = 'lo' }
         {errorMessage && (
           <div className="p-3 rounded-lg bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs flex items-center gap-2 animate-in fade-in duration-200">
             <AlertCircle className="w-4 h-4 shrink-0 text-rose-400" />
-            <span>{errorMessage}</span>
+            <span className="leading-relaxed">{errorMessage}</span>
+          </div>
+        )}
+
+        {/* Helper when user already exists but password did not match on login */}
+        {mode === 'login' && accountFoundMismatch && (
+          <div className="p-3.5 bg-blue-950/70 border border-blue-500/50 rounded-xl space-y-2 text-xs animate-in fade-in">
+            <div className="flex items-center gap-2 text-blue-300 font-semibold">
+              <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+              <span>{lang === 'lo' ? `ພົບບັນຊີຂອງທ່ານ: ${accountFoundMismatch.name}` : `Account found: ${accountFoundMismatch.name}`}</span>
+            </div>
+            <p className="text-slate-300 text-[11px] leading-relaxed">
+              {lang === 'lo'
+                ? 'ລະຫັດຜ່ານອາດບໍ່ຖືກຕ້ອງ. ທ່ານບໍ່ຈຳເປັນຕ້ອງລົງທະບຽນໃໝ່! ສາມາດກົດປຸ່ມດ້ານລຸ່ມເພື່ອຕັ້ງລະຫັດຜ່ານໃໝ່ໄດ້ທັນທີ:'
+                : 'Incorrect password. You do NOT need to register again! Reset your password with one click:'}
+            </p>
+            <button
+              type="button"
+              onClick={() => {
+                playSound('click');
+                setForgotIdentifier(loginIdentifier || accountFoundMismatch.phone || accountFoundMismatch.name);
+                setMode('forgot');
+                setErrorMessage(null);
+                setAccountFoundMismatch(null);
+              }}
+              className="w-full py-2 px-3 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-bold rounded-lg shadow-md flex items-center justify-center gap-1.5 transition-all text-xs"
+            >
+              <KeyRound className="w-3.5 h-3.5 text-amber-300" />
+              <span>{lang === 'lo' ? '👉 ກົດບ່ອນນີ້ເພື່ອຕັ້ງລະຫັດຜ່ານໃໝ່ທັນທີ' : '👉 Reset Password Now'}</span>
+            </button>
+          </div>
+        )}
+
+        {/* Helper when user tried to register with an already existing phone/username */}
+        {mode === 'register' && alreadyRegisteredUser && (
+          <div className="p-3.5 bg-amber-950/70 border border-amber-500/50 rounded-xl space-y-2 text-xs animate-in fade-in">
+            <div className="flex items-center gap-2 text-amber-300 font-semibold">
+              <AlertCircle className="w-4 h-4 text-amber-400 shrink-0" />
+              <span>{lang === 'lo' ? 'ເບີໂທ ຫຼື ຊື່ນີ້ເຄີຍລົງທະບຽນໄວ້ແລ້ວ!' : 'Account already registered!'}</span>
+            </div>
+            <p className="text-slate-300 text-[11px] leading-relaxed">
+              {lang === 'lo'
+                ? `ທ່ານເຄີຍລົງທະບຽນບັນຊີ (${alreadyRegisteredUser.name}) ໄວ້ແລ້ວ. ບໍ່ຕ້ອງລົງທະບຽນຊ້ຳ! ສາມາດກົດເຂົ້າສູ່ລະບົບ ຫຼື ຕັ້ງລະຫັດໃໝ່ໄດ້ເລີຍ:`
+                : `Account (${alreadyRegisteredUser.name}) already exists. No need to register again!`}
+            </p>
+            <div className="grid grid-cols-2 gap-2 pt-1">
+              <button
+                type="button"
+                onClick={() => {
+                  playSound('click');
+                  setLoginIdentifier(regPhone || regUsername);
+                  setMode('login');
+                  setErrorMessage(null);
+                  setAlreadyRegisteredUser(null);
+                }}
+                className="py-2 px-2.5 bg-blue-600 hover:bg-blue-500 text-white font-semibold rounded-lg text-xs flex items-center justify-center gap-1 transition-all"
+              >
+                <LogIn className="w-3.5 h-3.5" />
+                <span>{lang === 'lo' ? 'ເຂົ້າສູ່ລະບົບ' : 'Sign In'}</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  playSound('click');
+                  setForgotIdentifier(regPhone || regUsername);
+                  setMode('forgot');
+                  setErrorMessage(null);
+                  setAlreadyRegisteredUser(null);
+                }}
+                className="py-2 px-2.5 bg-amber-600 hover:bg-amber-500 text-white font-semibold rounded-lg text-xs flex items-center justify-center gap-1 transition-all"
+              >
+                <KeyRound className="w-3.5 h-3.5" />
+                <span>{lang === 'lo' ? 'ຕັ້ງລະຫັດໃໝ່' : 'Reset Pass'}</span>
+              </button>
+            </div>
           </div>
         )}
 

@@ -3,7 +3,7 @@ import { Account, Transaction, Currency, Language } from '../types';
 import { getT } from '../utils/translations';
 import { formatCurrency } from '../utils/formatters';
 import { playSound } from '../utils/audio';
-import { Plus, Building2, Wallet, PiggyBank, CreditCard, ArrowRightLeft, Edit2, Trash2, Check, X } from 'lucide-react';
+import { Plus, Building2, Wallet, PiggyBank, CreditCard, ArrowRightLeft, Edit2, Trash2, Check, X, RotateCcw, PlusCircle } from 'lucide-react';
 import { ConfirmDeleteModal } from './ConfirmDeleteModal';
 
 interface AccountsManagerProps {
@@ -15,6 +15,7 @@ interface AccountsManagerProps {
   onEditAccount: (acc: Account) => void;
   onDeleteAccount: (accountId: string) => void;
   onOpenTransferModal: () => void;
+  onResetBalance?: () => void;
 }
 
 export const AccountsManager: React.FC<AccountsManagerProps> = ({
@@ -26,6 +27,7 @@ export const AccountsManager: React.FC<AccountsManagerProps> = ({
   onEditAccount,
   onDeleteAccount,
   onOpenTransferModal,
+  onResetBalance,
 }) => {
   const t = getT(lang);
 
@@ -154,10 +156,32 @@ export const AccountsManager: React.FC<AccountsManagerProps> = ({
       {/* Aggregate Overview Card */}
       <div className="bg-slate-900/80 border border-slate-800/80 rounded-xl p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <span className="text-xs text-slate-400 uppercase tracking-wider">{t.totalBalance}</span>
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-slate-400 uppercase tracking-wider">{t.totalBalance}</span>
+            {onResetBalance && totalAssets > 0 && (
+              <button
+                type="button"
+                onClick={() => {
+                  if (window.confirm(lang === 'lo' ? 'ທ່ານຕ້ອງການລ້າງຍອດເງິນຄົງເຫຼືອທັງໝົດໃຫ້ເປັນ 0 ₭ ແທ້ບໍ? (ຍອດເງິນຈະເລີ່ມຕົ້ນ 0 ຈົນກວ່າທ່ານຈະເພີ່ມເຂົ້າມາເອງ)' : 'Are you sure you want to reset remaining balance to 0?')) {
+                    onResetBalance();
+                  }
+                }}
+                className="flex items-center gap-1 text-[10px] text-rose-400 hover:text-rose-300 bg-rose-950/40 border border-rose-900/60 px-2 py-0.5 rounded transition-colors"
+                title={lang === 'lo' ? 'ລ້າງຍອດເຫຼືອໃຫ້ເປັນ 0' : 'Reset balance to 0'}
+              >
+                <RotateCcw className="w-2.5 h-2.5" />
+                <span>{lang === 'lo' ? 'ລ້າງຍອດເປັນ 0' : 'Reset to 0'}</span>
+              </button>
+            )}
+          </div>
           <div className="text-2xl sm:text-3xl font-bold text-slate-100 font-mono tabular-nums mt-0.5">
             {formatCurrency(totalAssets, currency)}
           </div>
+          {totalAssets === 0 && (
+            <p className="text-[11px] text-slate-400 mt-1">
+              {lang === 'lo' ? 'ຍອດເງິນເລີ່ມຕົ້ນ 0 ₭ (ຈະປ່ຽນແປງເມື່ອທ່ານເພີ່ມເງິນ ຫຼື ບັນທຶກລາຍຮັບ-ລາຍຈ່າຍ)' : 'Starting balance is 0. Will update when you deposit or add transactions.'}
+            </p>
+          )}
         </div>
         <div className="flex items-center gap-4 text-xs text-slate-400 font-mono tabular-nums">
           <div>

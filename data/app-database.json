@@ -1,0 +1,201 @@
+{
+  "users": [
+    {
+      "id": "usr_1791175894996_wk7g",
+      "username": "narnny",
+      "phone": "02099774515",
+      "fullName": "kounyavong",
+      "password": "123",
+      "avatarColor": "#2563eb",
+      "createdAt": 1791175894996
+    }
+  ],
+  "userData": {
+    "usr_1791175894996_wk7g": {
+      "transactions": [
+        {
+          "type": "income",
+          "amount": 100055,
+          "currency": "LAK",
+          "amountInBase": 100055,
+          "categoryId": "inc_salary",
+          "accountId": "acc_usr_1791175894996_wk7g_bcel",
+          "date": "2026-10-06",
+          "time": "11:47",
+          "title": "PF",
+          "userId": "usr_1791175894996_wk7g",
+          "id": "tx_1791262114294_7kdp",
+          "createdAt": 1791262114294
+        },
+        {
+          "accountId": "acc_usr_1791175894996_wk7g_bcel",
+          "amount": 100000,
+          "amountInBase": 100000,
+          "categoryId": "exp_food",
+          "createdAt": 1791193916207,
+          "currency": "LAK",
+          "date": "2026-10-05",
+          "id": "tx_1791193916207_1kag",
+          "time": "16:51",
+          "title": "ກະເຟ",
+          "type": "expense",
+          "updatedAt": 1791261676687,
+          "userId": "usr_1791175894996_wk7g"
+        }
+      ],
+      "categories": [
+        {
+          "id": "inc_salary",
+          "nameLo": "ເງິນເດືອນຫຼັກ",
+          "nameEn": "Primary Salary",
+          "type": "income",
+          "icon": "Briefcase",
+          "color": "#10b981",
+          "userId": "usr_1791175894996_wk7g"
+        },
+        {
+          "id": "inc_business",
+          "nameLo": "ຄ້າຂາຍ & ທຸລະກິດ",
+          "nameEn": "Business & Sales",
+          "type": "income",
+          "icon": "TrendingUp",
+          "color": "#06b6d4",
+          "userId": "usr_1791175894996_wk7g"
+        },
+        {
+          "id": "inc_bonus",
+          "nameLo": "ໂບນັດ & ລາຍຮັບເສີມ",
+          "nameEn": "Bonus & Freelance",
+          "type": "income",
+          "icon": "Award",
+          "color": "#8b5cf6",
+          "userId": "usr_1791175894996_wk7g"
+        },
+        {
+          "id": "inc_investment",
+          "nameLo": "ດອກເບ້ຍ & ການລົງທຶນ",
+          "nameEn": "Investments",
+          "type": "income",
+          "icon": "DollarSign",
+          "color": "#3b82f6",
+          "userId": "usr_1791175894996_wk7g"
+        },
+        {
+          "id": "inc_other",
+          "nameLo": "ລາຍຮັບອື່ນໆ",
+          "nameEn": "Other Income",
+          "type": "income",
+          "icon": "PlusCircle",
+          "color": "#14b8a6",
+          "userId": "usr_1791175894996_wk7g"
+        },
+        {
+          "id": "exp_food",
+          "nameLo": "ອາຫານ & ເຄື່ອງດື່ມ",
+          "nameEn": "Food & Dining",
+          "type": "expense",
+          "icon": "Utensils",
+          "color": "#f97316",
+          "userId": "usr_1791175894996_wk7g"
+        },
+        {
+          "id": "exp_fuel",
+          "nameLo": "ການເດີນທາງ & ນ້ຳມັນ",
+          "nameEn": "Transport & Fuel",
+          "type": "expense",
+          "icon": "Car",
+          "color": "#3b82f6",
+          "userId": "usr_1791175894996_wk7g"
+        },
+        {
+          "id": "exp_utilities",
+          "nameLo": "ຄ່ານ້ຳ-ຄ່າໄຟ-ເນັດ",
+          "nameEn": "Utilities (EDL/Net)",
+          "type": "expense",
+          "icon": "Zap",
+          "color": "#eab308",
+          "userId": "usr_1791175894996_wk7g"
+        },
+        {
+          "id": "exp_housing",
+          "nameLo": "ທີ່ພັກອາໄສ & ຄ່າເຊົ່າ",
+          "nameEn": "Housing & Rent",
+          "type": "expense",
+          "icon": "Home",
+          "color": "#6366f1",
+          "userId": "usr_1791175894996_wk7g"
+        },
+        {
+          "id": "exp_shopping",
+          "nameLo": "ຊື້ເຄື່ອງໃຊ້ & ຊັອບປິ້ງ",
+          "nameEn": "Shopping",
+          "type": "expense",
+          "icon": "ShoppingBag",
+          "color": "#ec4899",
+          "userId": "usr_1791175894996_wk7g"
+        },
+        {
+          "id": "exp_health",
+          "nameLo": "ສຸຂະພາບ & ຢາ",
+          "nameEn": "Healthcare",
+          "type": "expense",
+          "icon": "HeartPulse",
+          "color": "#ef4444",
+          "userId": "usr_1791175894996_wk7g"
+        },
+        {
+          "id": "exp_social",
+          "nameLo": "ງານບຸນ & ງານສັງຄົມ",
+          "nameEn": "Social & Merit",
+          "type": "expense",
+          "icon": "Gift",
+          "color": "#a855f7",
+          "userId": "usr_1791175894996_wk7g"
+        },
+        {
+          "id": "exp_entertainment",
+          "nameLo": "ບັນເທີງ & ພັກຜ່ອນ",
+          "nameEn": "Entertainment",
+          "type": "expense",
+          "icon": "Film",
+          "color": "#06b6d4",
+          "userId": "usr_1791175894996_wk7g"
+        },
+        {
+          "id": "exp_education",
+          "nameLo": "ການສຶກສາ & ຝຶກອົບຮົມ",
+          "nameEn": "Education",
+          "type": "expense",
+          "icon": "GraduationCap",
+          "color": "#14b8a6",
+          "userId": "usr_1791175894996_wk7g"
+        },
+        {
+          "id": "exp_other",
+          "nameLo": "ລາຍຈ່າຍອື່ນໆ",
+          "nameEn": "Other Expenses",
+          "type": "expense",
+          "icon": "MoreHorizontal",
+          "color": "#64748b",
+          "userId": "usr_1791175894996_wk7g"
+        }
+      ],
+      "accounts": [
+        {
+          "id": "acc_usr_1791175894996_wk7g_bcel",
+          "userId": "usr_1791175894996_wk7g",
+          "nameLo": "BCEL One (ບັນຊີຫຼັກ)",
+          "nameEn": "BCEL One Main",
+          "type": "bank",
+          "initialBalance": 0,
+          "currency": "LAK",
+          "accountNumber": "010-12-0008899",
+          "color": "#2563eb"
+        }
+      ],
+      "budgets": [],
+      "recurring": [],
+      "updatedAt": 1791365401771
+    }
+  }
+}
